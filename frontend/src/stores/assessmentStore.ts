@@ -1,18 +1,17 @@
 import { defineStore } from 'pinia'
 import {
-  type TargetWordObject,
+  type TargerWordFEObject,
   type ApiResponse,
   CurrentTestingStatus,
   type TranscriptionResponse,
 } from '../../../shared/types'
 
-interface DisplayWordArray {}
 export const useAssessmentStore = defineStore('assessments', {
   state: () => ({
     recordingArray: [] as Blob[],
     currentBlob: null as Blob | null,
     mediaRecorder: null as MediaRecorder | null,
-    currentTargetWords: null as TargetWordObject[] | null,
+    currentTargetWords: null as TargerWordFEObject[] | null,
     currentDisplayWords: [''] as string[] | null,
     currentDisplayWordCount: 0,
     maxTargetWords: 9,
@@ -94,7 +93,7 @@ export const useAssessmentStore = defineStore('assessments', {
     async loadWords() {
       try {
         await this.getTargetWordsAndPhonemes()
-        this.getWordsForDisplay()
+        this.currentTargetWords
       } catch (error) {
         console.error('There was a problem loading the Target Words. ', error)
       }
@@ -102,7 +101,7 @@ export const useAssessmentStore = defineStore('assessments', {
     async getTargetWordsAndPhonemes() {
       const response = await fetch('http://localhost:5000/assessment/targetWords')
 
-      const result: ApiResponse<TargetWordObject[]> = await response.json()
+      const result: ApiResponse<TargerWordFEObject[]> = await response.json()
 
       console.log(result.data)
 
@@ -140,21 +139,6 @@ export const useAssessmentStore = defineStore('assessments', {
     getWordsForDisplay() {
       this.currentDisplayWords = []
       if (this.currentTargetWords) {
-        const shuffledArray = this.shuffleItems(this.currentTargetWords)
-        console.log(shuffledArray)
-
-        let i = 0
-        for (const item of shuffledArray) {
-          if (i <= this.maxTargetWords) {
-            if (item.word.length > 1) {
-              const randomNumber = Math.floor(Math.random() * item.word.length)
-              this.currentDisplayWords?.push(item.word[randomNumber] ?? '')
-            } else {
-              this.currentDisplayWords?.push(item.word[0] ?? '')
-            }
-            ++i
-          }
-        }
         console.log(this.currentDisplayWords)
       }
     },

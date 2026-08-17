@@ -11,7 +11,7 @@ await assessmentStore.loadMediaRecorder()
 const startAssessment = async () => {
   await assessmentStore.loadWords()
   assessmentStore.toggleTestingState(true)
-  assessmentStore.setCurrentTimeLimit(3)
+  assessmentStore.setCurrentTimeLimit(5)
   assessmentStore.startTimer()
   assessmentStore.currentTestStatus = CurrentTestingStatus.inProgress
 }
