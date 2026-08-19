@@ -6,6 +6,7 @@ import { getPhonemes } from "../utils/g2p.ts";
 import type {
   TargetWordBEObject,
   TargetWordFEObject,
+  AssessmentIdInfoObject,
   ApiResponse
 } from "../../../shared/types.ts";
 
@@ -48,15 +49,14 @@ const shuffleItems = <T>(array: T[]): T[] => {
   return array;
 };
 
-const preppedTargetArray = [] as PreppedTargetArray;
-const targetPhonemes: string[][] = [];
-const transcribedPhonemes: string[][] = [];
-
 const wordVariations = ["quaf", "quaff"];
 const phonemetizedWord = [["K", "W", "AE", "F"]];
 
 // Sqlite Statements
 const getAllWordsStmt = db.prepare("SELECT * FROM targetWords");
+const getWordsForAssessmentStmt = db.prepare(
+  "SELECT * FROM targetWords ORDER BY RANDOM() LIMIT ?"
+);
 const insertWordStmt = db.prepare(
   "INSERT INTO targetWords (word, arpabet, unit, test) VALUES (?, ?, ?, ?)"
 );
@@ -66,14 +66,23 @@ const deleteIndividualWordStmt = db.prepare(
 const addAssessmentQuestionsStmt = db.prepare(
   "INSERT INTO studentAssessments (studentId, testId, status, questions) VALUES (?, ?, ?, ?)"
 );
+const getAssessmentQuestionsStmt = db.prepare(
+  "SELECT * FROM studentAssessments WHERE studentId = ? and testId = ?"
+);
 
 assessmentRouter.post(
   "/students/:studentId/:testId",
-  (req: Request, res: Response<ApiResponse<TargetWordFEObject[]>>) => {
-    console.log("hello!!!");
-
+  (
+    req: Request,
+    res: Response<ApiResponse<TargetWordFEObject[], AssessmentIdInfoObject>>
+  ) => {
     const { studentId, testId } = req.params;
-    const rawRows = getAllWordsStmt.all() as TargetWordDbRow[];
+
+    const maxTargetWords = req.body.numberOfQuestions;
+
+    const rawRows = getWordsForAssessmentStmt.all(
+      maxTargetWords
+    ) as TargetWordDbRow[];
 
     const parsedAssessmentData: TargetWordBEObject[] = rawRows.map((row) => ({
       ...row,
@@ -86,25 +95,37 @@ assessmentRouter.post(
         .json({ success: false, error: "Target words not found" });
     }
     const shuffledAssessmentData = shuffleItems(parsedAssessmentData);
+    const semiPreppedAssessmentData = shuffledAssessmentData.map(
+      (item, index) => {
+        const { ...rest } = item;
+        return { ...rest, listNumber: index + 1 };
+      }
+    );
+
+    console.log(semiPreppedAssessmentData);
+
     const info = addAssessmentQuestionsStmt.run(
       studentId,
       testId,
       "pending",
-      JSON.stringify(shuffledAssessmentData)
+      JSON.stringify(semiPreppedAssessmentData)
     );
-    const preppedData = shuffledAssessmentData.map((item, index) => {
+    const assessmentId = info.lastInsertRowid;
+    console.log(assessmentId);
+
+    const fullyPreppedData = semiPreppedAssessmentData.map((item) => {
       const { arpabet, ...rest } = item;
-      return { ...rest, listNumber: index + 1 };
+      return { ...rest };
     });
     res.status(200).json({
       success: true,
-      data: preppedData
+      data: [fullyPreppedData, { id: assessmentId }]
     });
   }
 );
 assessmentRouter.get(
   "/targetWords",
-  (req: Request, res: Response<ApiResponse<TargetWordFEObject[]>>) => {
+  (req: Request, res: Response<ApiResponse<TargetWordFEObject[], null>>) => {
     const rawRows = getAllWordsStmt.all() as TargetWordDbRow[];
 
     const data: TargetWordBEObject[] = rawRows.map((row) => ({
@@ -120,12 +141,10 @@ assessmentRouter.get(
       return { ...rest, listNumber: index + 1 };
     });
 
-    console.log(preppedTargetArray);
-
     try {
       res.status(200).json({
         success: true,
-        data: preppedData
+        data: [preppedData, null]
       });
     } catch (err) {
       res.status(500).json({ success: false, error: (err as Error).message });
@@ -133,9 +152,7 @@ assessmentRouter.get(
   }
 );
 
-assessmentRouter.post("/targetWords", (req: Request, res: Response) => {
-  targetPhonemes;
-});
+assessmentRouter.post("/targetWords", (req: Request, res: Response) => {});
 
 assessmentRouter.post("/targetWords/add", (req: Request, res: Response) => {
   const info = insertWordStmt.run(
@@ -155,17 +172,35 @@ assessmentRouter.post("/targetWords/add", (req: Request, res: Response) => {
     res.status(500).json({ error: (err as Error).message });
   }
 });
+const transcribeAudioArray = async (audioFile: File): Promise<string[]> => {
+  const transcription = await openai.audio.transcriptions.create({
+    file: audioFile,
+    model: "whisper-1",
+    language: "en",
+    response_format: "verbose_json",
+    timestamp_granularities: ["word"]
+  });
+  const answer = await getPhonemes(transcription.text);
 
+  return answer;
+};
 assessmentRouter.post(
-  "/transcribe",
+  "/transcribe/:assessmentId/:userId/:testId/:questionId",
   upload.single("audio"),
   async (req: Request, res: Response) => {
+    const { userId, testId, questionId } = req.params;
+    try {
+      const info = getAssessmentQuestionsStmt.get(userId, testId);
+    } catch (error) {
+      res
+        .status(500)
+        .json("There was an error retrieving the test data from the database.");
+    }
     try {
       if (!req.file) {
         res.status(400).json({ error: "No audio file uploaded." });
         return;
       }
-
       console.log(`Processing file: ${req.file.originalname}`);
 
       const audioFile = await toFile(
@@ -176,36 +211,29 @@ assessmentRouter.post(
       console.log(
         `Received file: ${req.file.originalname} (${req.file.size} bytes)`
       );
+      const transcribedPhonemes: string[][] = [];
+      const processedAudioArray = transcribeAudioArray(audioFile);
+      console.log(processedAudioArray);
 
-      const transcription = await openai.audio.transcriptions.create({
-        file: audioFile,
-        model: "whisper-1",
-        language: "en",
-        response_format: "verbose_json",
-        timestamp_granularities: ["word"]
-      });
-      transcribedPhonemes.length = 0;
-      const answer = await getPhonemes(transcription.text);
-      transcribedPhonemes.push(answer);
+      // transcribedPhonemes.push(processedAudioArray);
       let result: boolean = false;
-      if (targetPhonemes[0] && transcribedPhonemes[0]) {
-        result = checkAnswer(targetPhonemes[0], transcribedPhonemes[0]);
-      }
-      console.log(preppedTargetArray);
+      // if (targetPhonemes[0] && transcribedPhonemes[0]) {
+      //   result = checkAnswer(targetPhonemes[0], transcribedPhonemes[0]);
+      // }
 
-      console.log(
-        transcription.text,
-        targetPhonemes,
-        transcribedPhonemes,
-        result
-      );
+      // console.log(
+      //   transcription.text,
+      //   targetPhonemes,
+      //   transcribedPhonemes,
+      //   result
+      // );
 
-      res.json({
-        text: transcription.text,
-        targetPhonemes,
-        transcribedPhonemes,
-        result
-      });
+      // res.json({
+      //   text: transcription.text,
+      //   targetPhonemes,
+      //   transcribedPhonemes,
+      //   result
+      // });
     } catch (err) {
       console.error("Error transcribing text:", err);
       res.status(500).json({ error: "Unable to transcribe audio." });

@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
 import {
-  type TargerWordFEObject,
+  type TargetWordFEObject,
   type ApiResponse,
   CurrentTestingStatus,
   type TranscriptionResponse,
+  type AssessmentIdInfoObject,
 } from '../../../shared/types'
 
 export const useAssessmentStore = defineStore('assessments', {
@@ -11,10 +12,11 @@ export const useAssessmentStore = defineStore('assessments', {
     recordingArray: [] as Blob[],
     currentBlob: null as Blob | null,
     mediaRecorder: null as MediaRecorder | null,
-    currentTargetWords: null as TargerWordFEObject[] | null,
+    currentTargetWords: [] as TargetWordFEObject[],
+    currentAssessmentId: null as number | bigint | null,
     currentDisplayWords: [''] as string[] | null,
     currentDisplayWordCount: 0,
-    maxTargetWords: 9,
+    maxTargetWords: 10,
     timer: 0,
     isTiming: false,
     currentItemTimer: 0,
@@ -99,16 +101,33 @@ export const useAssessmentStore = defineStore('assessments', {
       }
     },
     async getTargetWordsAndPhonemes() {
-      const response = await fetch('http://localhost:5000/assessment/targetWords')
+      const studentId = 1
+      const testId = 1
 
-      const result: ApiResponse<TargerWordFEObject[]> = await response.json()
+      console.log(this.maxTargetWords)
 
-      console.log(result.data)
+      const response = await fetch(
+        `http://localhost:5000/assessment/students/${studentId}/${testId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ numberOfQuestions: this.maxTargetWords }),
+        },
+      )
+      if (response.ok) {
+        const result: ApiResponse<TargetWordFEObject[], AssessmentIdInfoObject> =
+          await response.json()
 
-      if (!result.success || !result.data) {
-        throw new Error(result.error ?? 'There was an error retrieving the target words.')
+        console.log(result.data)
+
+        if (!result.success || !result.data) {
+          throw new Error(result.error ?? 'There was an error retrieving the target words.')
+        }
+
+        const [words, info] = result.data
+        this.currentTargetWords = words
+        this.currentAssessmentId = info?.id ?? null
       }
-      this.currentTargetWords = result.data
     },
     changeCurrentDisplayWordCount(param: string) {
       if (param === 'increase') {
@@ -151,14 +170,11 @@ export const useAssessmentStore = defineStore('assessments', {
           .then((stream) => {
             this.mediaRecorder = new MediaRecorder(stream)
             this.mediaRecorder.ondataavailable = (event) => {
-              this.resetRecordingArray()
               this.recordingArray.push(event.data)
             }
             this.mediaRecorder.onstop = async (event) => {
               console.log('recorder stopped')
               this.currentBlob = new Blob(this.recordingArray, { type: 'audio/ogg; codecs=opus' })
-              await this.sendAudioToBackend(this.currentBlob)
-              this.currentBlob = null
               const audioBlob = new Blob(this.recordingArray, { type: 'audio/webm' })
               // audioURL.value = URL.createObjectURL(audioBlob)
             }
@@ -176,6 +192,13 @@ export const useAssessmentStore = defineStore('assessments', {
       this.recordingArray.length = 0
 
       console.log('recording array reset!', this.recordingArray)
+    },
+
+    async finishAssessment() {
+      if (this.currentTestStatus === CurrentTestingStatus.finished && this.currentBlob) {
+        await this.sendAudioToBackend(this.currentBlob)
+        this.currentBlob = null
+      }
     },
     async sendAudioToBackend(audioData: Blob) {
       const formData = new FormData()

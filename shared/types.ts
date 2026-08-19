@@ -1,6 +1,6 @@
 export interface TargetWordBEObject {
   word: string[];
-  arpabet: string[][]; // don't want this available in the FE... nullify before sending to FE
+  arpabet: string[][];
   unit: string;
   test: string;
   listNumber?: number;
@@ -9,7 +9,9 @@ export interface TargetWordBEObject {
 export type TargetWordFEObject = Omit<TargetWordBEObject, "arpabet"> & {
   listNumber: number;
 };
-
+export interface AssessmentIdInfoObject {
+  id: number | bigint;
+}
 // export interface TargerWordListBEObject extends TargetWordObject {
 //   listNumber: number;
 // }
@@ -25,9 +27,9 @@ export interface TranscriptionResponse {
 
 interface AssessmentObject {}
 
-export interface ApiResponse<T> {
+export interface ApiResponse<T, U> {
   success: Boolean;
-  data?: T;
+  data?: [T, U?];
   error?: string;
 }
 
