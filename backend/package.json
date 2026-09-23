@@ -15,12 +15,14 @@
   "dependencies": {
     "@types/cors": "^2.8.19",
     "@types/multer": "^2.2.0",
+    "@types/ws": "^8.18.1",
     "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "multer": "^2.2.0",
-    "openai": "^6.49.0"
+    "openai": "^6.49.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

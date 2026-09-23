@@ -5,23 +5,42 @@ import OpenAI, { toFile } from "openai";
 import { getPhonemes } from "../utils/g2p.ts";
 import type {
   TargetWordBEObject,
-  TargetWordFEObject,
-  AssessmentIdInfoObject,
-  ApiResponse
+  ApiResponse,
+  AssessmentObject,
+  WordTestsBEObject,
+  WordTestsFEObject,
+  UserTestDataObject
 } from "../../../shared/types.ts";
+import type { WebSocketServer } from "ws";
 
 const assessmentRouter = express.Router();
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 10 }
+});
 
 interface TargetWordDbRow {
   word: string;
   arpabet: string;
   unit: string;
   test: string;
+}
+interface TargetTestDbRow {
+  schoolId: number;
+  name: string;
+  testId: number;
+  wordId: number;
+  word: string;
+  arpabet: string;
+}
+
+interface AudioRow {
+  id: number;
+  data: Buffer;
 }
 
 type PreppedTargetArray = Omit<TargetWordBEObject, "test" | "unit">[][];
@@ -58,97 +77,213 @@ const getWordsForAssessmentStmt = db.prepare(
   "SELECT * FROM targetWords ORDER BY RANDOM() LIMIT ?"
 );
 const insertWordStmt = db.prepare(
-  "INSERT INTO targetWords (word, arpabet, unit, test) VALUES (?, ?, ?, ?)"
+  "INSERT INTO targetWords (schoolId, word, arpabet, unit) VALUES (?, ?, ?, ?)"
 );
 const deleteIndividualWordStmt = db.prepare(
-  "DELETE FROM targetWords WHERE id = ?"
+  "DELETE FROM targetWords WHERE id = ? AND schoolId = ?"
 );
 const addAssessmentQuestionsStmt = db.prepare(
-  "INSERT INTO studentAssessments (studentId, testId, status, questions) VALUES (?, ?, ?, ?)"
+  "INSERT INTO studentAssessments (schoolId, userId, assessmentSessionId, testId, status, questions, timeStarted) VALUES (?, ?, ?, ?, ?, ?, ?)"
+);
+const updateAssessmentQuestionsStmt = db.prepare(
+  "UPDATE studentAssessments SET status = ?, answersArpabet = ?, timeEnded = ? WHERE id = ? AND schoolId = ? AND userId = ? AND assessmentSessionId = ? AND testId = ?"
 );
 const getAssessmentQuestionsStmt = db.prepare(
-  "SELECT * FROM studentAssessments WHERE studentId = ? and testId = ?"
+  "SELECT * FROM studentAssessments WHERE id = ? AND schoolId = ? AND userId = ? AND assessmentSessionId = ? AND testId = ?"
+);
+const addAssessmentSessionStmt = db.prepare(
+  "INSERT INTO assessmentSessions (schoolId, userId, status, timeStarted) VALUES (?, ?, ?, ?)"
+);
+const finishAssessmentSessionStmt = db.prepare(
+  "UPDATE assessmentSessions SET status = ?, timeEnded = ? WHERE id = ? AND userId = ? AND schoolId = ?"
 );
 
-assessmentRouter.post(
-  "/students/:studentId/:testId",
-  (
-    req: Request,
-    res: Response<ApiResponse<TargetWordFEObject[], AssessmentIdInfoObject>>
-  ) => {
-    const { studentId, testId } = req.params;
+const getSpecifiedWordTest = db.prepare(
+  "SELECT tarw.id,tarw.word,tarw.arpabet, tw.testId FROM targetWords tarw LEFT JOIN testWords tw ON tarw.id = tw.wordId WHERE tw.testId = ?"
+);
+const getAllWordTestsStmt = db.prepare(
+  "SELECT tw.schoolId, tw.testId, tw.wordId, tarw.word, tarw.arpabet FROM targetWords tarw LEFT JOIN testWords tw ON tarw.id = tw.wordId WHERE tw.schoolId = ? AND tw.testId NOT NULL ORDER BY tw.testId"
+);
 
-    const maxTargetWords = req.body.numberOfQuestions;
+const getAllTestsStmt = db.prepare(
+  "SELECT t.id AS testId, t.name, t.focus, t.schoolId, tw.wordId, tarw.word, tarw.arpabet FROM tests t LEFT JOIN testWords tw ON t.id = tw.testId LEFT JOIN targetWords tarw ON tw.wordId = tarw.id WHERE tw.schoolId = ? AND tw.testId NOT NULL ORDER BY t.id"
+);
 
-    const rawRows = getWordsForAssessmentStmt.all(
-      maxTargetWords
-    ) as TargetWordDbRow[];
+const addAudioDataStmt = db.prepare(
+  "INSERT INTO userAudioData (audio, mimeType, schoolId, userId, studentAssessmentId, questionId) VALUES (?, ?, ?, ?, ?, ?)"
+);
 
-    const parsedAssessmentData: TargetWordBEObject[] = rawRows.map((row) => ({
-      ...row,
-      word: JSON.parse(row.word),
-      arpabet: JSON.parse(row.arpabet)
-    }));
-    if (!parsedAssessmentData) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Target words not found" });
-    }
-    const shuffledAssessmentData = shuffleItems(parsedAssessmentData);
-    const semiPreppedAssessmentData = shuffledAssessmentData.map(
-      (item, index) => {
-        const { ...rest } = item;
-        return { ...rest, listNumber: index + 1 };
+const getAllAudioDataStmt = db.prepare(
+  "SELECT * FROM userAudioData WHERE schoolId = ? AND userId = ? AND studentAssessmentId = ?"
+);
+
+const getAllStudentAssessmentsStmt = db.prepare(
+  "SELECT * FROM studentAssessments WHERE schoolId = ? AND userId = ? AND assessmentSessionID NOT NULL GROUP BY assessmentSessionId, testId"
+);
+
+assessmentRouter.get(
+  "/tests/user/:schoolId/:userId",
+  (req: Request, res: Response<ApiResponse<UserTestDataObject[], null>>) => {
+    const { schoolId, userId } = req.params;
+    console.log(schoolId);
+    const rawRows = getAllStudentAssessmentsStmt.all(
+      schoolId,
+      userId
+    ) as UserTestDataObject[];
+    const safeParse = (val: unknown) => {
+      if (typeof val !== "string") return val;
+      try {
+        const parsed = JSON.parse(val);
+        return typeof parsed === "string" ? JSON.parse(parsed) : parsed;
+      } catch {
+        return val;
       }
-    );
-
-    console.log(semiPreppedAssessmentData);
-
-    const info = addAssessmentQuestionsStmt.run(
-      studentId,
-      testId,
-      "pending",
-      JSON.stringify(semiPreppedAssessmentData)
-    );
-    const assessmentId = info.lastInsertRowid;
-    console.log(assessmentId);
-
-    const fullyPreppedData = semiPreppedAssessmentData.map((item) => {
-      const { arpabet, ...rest } = item;
-      return { ...rest };
-    });
+    };
+    const preppedRows: UserTestDataObject[] = rawRows?.map((row) => ({
+      ...row,
+      questions: safeParse(row.questions),
+      answersArpabet: safeParse(row.answersArpabet)
+    }));
     res.status(200).json({
       success: true,
-      data: [fullyPreppedData, { id: assessmentId }]
+      data: [preppedRows ? preppedRows : [], null]
     });
   }
 );
-assessmentRouter.get(
-  "/targetWords",
-  (req: Request, res: Response<ApiResponse<TargetWordFEObject[], null>>) => {
-    const rawRows = getAllWordsStmt.all() as TargetWordDbRow[];
 
-    const data: TargetWordBEObject[] = rawRows.map((row) => ({
+assessmentRouter.get(
+  "/:schoolId/:userId/:assessmentId/audio",
+  (req: Request, res: Response<ApiResponse<AudioRow[], null>>) => {
+    const { schoolId, userId, assessmentId } = req.params;
+
+    const rows = getAllAudioDataStmt.all(schoolId, userId, assessmentId) as
+      | AudioRow[]
+      | undefined;
+
+    res.status(200).json({
+      success: true,
+      data: [rows ?? [], null]
+    });
+  }
+);
+
+assessmentRouter.get(
+  "/tests/:schoolId",
+  (req: Request, res: Response<ApiResponse<WordTestsFEObject[], null>>) => {
+    const { schoolId } = req.params;
+    console.log(schoolId);
+
+    const rawRows = getAllTestsStmt.all(schoolId) as TargetTestDbRow[];
+
+    const parsedData: WordTestsBEObject[] = rawRows.map((row) => ({
       ...row,
       word: JSON.parse(row.word),
       arpabet: JSON.parse(row.arpabet)
     }));
 
-    prepareTargetPhonemesArray(data);
-    shuffleItems(data);
-    const preppedData = data.map((item, index) => {
-      const { arpabet, ...rest } = item;
-      return { ...rest, listNumber: index + 1 };
+    res.status(200).json({
+      success: true,
+      data: [parsedData, null]
+    });
+  }
+);
+assessmentRouter.post(
+  "/sessions",
+  (req: Request, res: Response<ApiResponse<number, null>>) => {
+    const { schoolId, user } = req.body;
+
+    const startTime = Date.now();
+
+    const info = addAssessmentSessionStmt.run(
+      schoolId,
+      user,
+      "in progress",
+      startTime
+    );
+    const wss = req.app.get("wss") as WebSocketServer;
+
+    const payload = JSON.stringify({
+      type: "session-started",
+      data: "Session Live!"
     });
 
-    try {
-      res.status(200).json({
-        success: true,
-        data: [preppedData, null]
-      });
-    } catch (err) {
-      res.status(500).json({ success: false, error: (err as Error).message });
-    }
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1) {
+        client.send(payload);
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      data: [Number(info.lastInsertRowid)]
+    });
+  }
+);
+assessmentRouter.patch(
+  "/sessions",
+  (req: Request, res: Response<ApiResponse<string, null>>) => {
+    const { user, assessmentSessionId, status, schoolId } = req.body;
+    const endTime = Date.now();
+    finishAssessmentSessionStmt.run(
+      status,
+      endTime,
+      assessmentSessionId,
+      user,
+      schoolId
+    );
+
+    const wss = req.app.get("wss") as WebSocketServer;
+
+    const payload = JSON.stringify({
+      type: "session-ended",
+      data: "Session Ended!"
+    });
+
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1) {
+        client.send(payload);
+      }
+    });
+    res.status(201).json({
+      success: true,
+      data: [
+        `Assessment Session ${assessmentSessionId} was successfully eneded.`
+      ]
+    });
+  }
+);
+assessmentRouter.post(
+  "/studentassessments",
+  (req: Request, res: Response<ApiResponse<number, null>>) => {
+    const {
+      schoolId,
+      studentId,
+      testId,
+      status,
+      currentAssessmentSessionID,
+      payload
+    } = req.body;
+    const currentTime = Date.now();
+    const info = addAssessmentQuestionsStmt.run(
+      schoolId,
+      studentId,
+      currentAssessmentSessionID,
+      testId,
+      status,
+      payload,
+      currentTime
+    );
+
+    res.status(200).json({
+      success: true,
+      data: [Number(info.lastInsertRowid)]
+    });
+  }
+);
+assessmentRouter.patch(
+  "/studentassessments",
+  (req: Request, res: Response<ApiResponse<null, null>>) => {
+    const currentTime = Date.now();
   }
 );
 
@@ -181,59 +316,129 @@ const transcribeAudioArray = async (audioFile: File): Promise<string[]> => {
     timestamp_granularities: ["word"]
   });
   const answer = await getPhonemes(transcription.text);
+  console.log(answer);
 
   return answer;
 };
+
 assessmentRouter.post(
-  "/transcribe/:assessmentId/:userId/:testId/:questionId",
-  upload.single("audio"),
+  "/transcribe",
+  upload.array("audio", 10),
   async (req: Request, res: Response) => {
-    const { userId, testId, questionId } = req.params;
+    const {
+      assessmentId,
+      schoolId,
+      userId,
+      testId,
+      assessmentSessionId,
+      wordData
+    } = req.body;
+
+    const wordDataObject = JSON.parse(wordData) as WordTestsBEObject[];
+    const wordIdData = wordDataObject.map((item) => item.wordId);
+    console.log(wordIdData);
+
+    const endingTime = Date.now();
+    let assessmentQuestions;
+    let assessmentInfo;
+
     try {
-      const info = getAssessmentQuestionsStmt.get(userId, testId);
-    } catch (error) {
+      assessmentInfo = (await getAssessmentQuestionsStmt.get(
+        assessmentId,
+        schoolId,
+        userId,
+        assessmentSessionId,
+        testId
+      )) as AssessmentObject;
+
+      assessmentQuestions = JSON.parse(assessmentInfo.questions);
+    } catch (err) {
+      console.error("Error retrieving assessment object: ", err);
       res
         .status(500)
         .json("There was an error retrieving the test data from the database.");
     }
     try {
-      if (!req.file) {
-        res.status(400).json({ error: "No audio file uploaded." });
-        return;
+      const files = req.files as Express.Multer.File[];
+      if (!req.files || req.files.length === 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "No files provided" });
       }
-      console.log(`Processing file: ${req.file.originalname}`);
 
-      const audioFile = await toFile(
-        req.file.buffer,
-        req.file.originalname || "audio.mp3"
-      );
+      const transcriptionPromises = files.map(async (file, index) => {
+        const audioFile = await toFile(file.buffer, file.originalname, {
+          type: file.mimetype
+        });
 
-      console.log(
-        `Received file: ${req.file.originalname} (${req.file.size} bytes)`
-      );
-      const transcribedPhonemes: string[][] = [];
-      const processedAudioArray = transcribeAudioArray(audioFile);
-      console.log(processedAudioArray);
+        addAudioDataStmt.run(
+          file.buffer,
+          file.mimetype,
+          schoolId,
+          userId,
+          assessmentId,
+          wordIdData[index]
+        );
+        return transcribeAudioArray(audioFile);
+      });
 
-      // transcribedPhonemes.push(processedAudioArray);
-      let result: boolean = false;
-      // if (targetPhonemes[0] && transcribedPhonemes[0]) {
-      //   result = checkAnswer(targetPhonemes[0], transcribedPhonemes[0]);
-      // }
+      const results = await Promise.all(transcriptionPromises);
 
-      // console.log(
-      //   transcription.text,
-      //   targetPhonemes,
-      //   transcribedPhonemes,
-      //   result
-      // );
+      const transcriptions = results.map((result) => result) as string[][];
 
-      // res.json({
-      //   text: transcription.text,
-      //   targetPhonemes,
-      //   transcribedPhonemes,
-      //   result
-      // });
+      console.log("transcriptions: ", transcriptions);
+      const checkedResults = [];
+      try {
+        if (transcriptions) {
+          for (let i = 0; i < transcriptions.length; ++i) {
+            if (
+              checkAnswer(
+                transcriptions[i] ?? [],
+                assessmentQuestions[i].arpabet[0]
+              )
+            ) {
+              checkedResults.push({
+                id: assessmentQuestions[i].id,
+                listNumber: assessmentQuestions[i].listNumber,
+                question: assessmentQuestions[i].arpabet[0],
+                answer: transcriptions[i] ?? [],
+                result: true
+              });
+            } else {
+              checkedResults.push({
+                listNumber: assessmentQuestions[i].listNumber,
+                question: assessmentQuestions[i].arpabet[0],
+                answer: transcriptions[i] ?? [],
+                result: false
+              });
+            }
+          }
+        }
+        console.log(checkedResults);
+      } catch (err) {
+        console.error("Error checking user answer: ", err);
+      }
+      try {
+        updateAssessmentQuestionsStmt.run(
+          "finished",
+          JSON.stringify(transcriptions),
+          endingTime,
+          assessmentId,
+          schoolId,
+          userId,
+          assessmentSessionId,
+          testId
+        );
+      } catch (err) {
+        console.error(
+          "There was an error saving the answers to this assessment: ",
+          err
+        );
+      }
+      res.status(200).json({
+        success: true,
+        data: { checkedResults }
+      });
     } catch (err) {
       console.error("Error transcribing text:", err);
       res.status(500).json({ error: "Unable to transcribe audio." });

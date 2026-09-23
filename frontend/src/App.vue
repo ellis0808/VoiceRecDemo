@@ -1,165 +1,127 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useAssessmentStore } from './stores/assessmentStore'
 import SingleWordView from './views/SingleWordView.vue'
 
-const assessmentStore = useAssessmentStore()
+// const assessmentStore = useAssessmentStore()
+// const userStore = useUserStore()
 
-let mediaRecorder: MediaRecorder | null = null
+// let mediaRecorder: MediaRecorder | null = null
 
-interface TranscriptionResponse {
-  text: string
-}
+// interface TranscriptionResponse {
+//   text: string
+// }
 
-interface WordList {
-  data: string[]
-}
-const userInput = ref<string>('')
+// interface WordList {
+//   data: string[]
+// }
+// const userInput = ref<string>('')
 
-const userInputStyling = computed(() => {
-  return {
-    'h-90 w-150 mt-5 ml-5': true,
-    'text-2xl': !userInput.value.length,
-    'text-lg': userInput.value.length,
-  }
-})
+// const userInputStyling = computed(() => {
+//   return {
+//     'h-90 w-150 mt-5 ml-5': true,
+//     'text-2xl': !userInput.value.length,
+//     'text-lg': userInput.value.length,
+//   }
+// })
 
-if (navigator.mediaDevices) {
-  navigator.mediaDevices
-    .getUserMedia({ audio: true })
-    .then((stream) => {
-      mediaRecorder = new MediaRecorder(stream)
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunks.push(event.data)
-      }
-      mediaRecorder.onstop = (event) => {
-        console.log('recorder stopped')
-        // const clipName = prompt('Enter a name for this recording')
-        recordedBlob.value = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' })
-        sendAudioToBackend(recordedBlob.value)
-        recordedBlob.value = []
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
-        audioURL.value = URL.createObjectURL(audioBlob)
-      }
-    })
+// if (navigator.mediaDevices) {
+//   navigator.mediaDevices
+//     .getUserMedia({ audio: true })
+//     .then((stream) => {
+//       mediaRecorder = new MediaRecorder(stream)
+//       mediaRecorder.ondataavailable = (event) => {
+//         audioChunks.push(event.data)
+//       }
+//       mediaRecorder.onstop = (event) => {
+//         console.log('recorder stopped')
+//         // const clipName = prompt('Enter a name for this recording')
+//         recordedBlob.value = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' })
+//         sendAudioToBackend(recordedBlob.value)
+//         recordedBlob.value = []
+//         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+//         audioURL.value = URL.createObjectURL(audioBlob)
+//       }
+//     })
 
-    .catch((error) => {
-      console.error('getUserMedia error: ', error)
-    })
-} else {
-  console.log('Audio capture not supported by your browser. Please check your settings.')
-}
+//     .catch((error) => {
+//       console.error('getUserMedia error: ', error)
+//     })
+// } else {
+//   console.log('Audio capture not supported by your browser. Please check your settings.')
+// }
 
-let audioChunks: Blob[] = []
-const audioURL = ref<string>('')
-const recordedBlob = ref()
-const isTesting = ref<Boolean>(false)
-const isRecording = ref<Boolean>(false)
+// const startRecording = async () => {
+//   if (isRecording.value) {
+//     return
+//   }
+//   if (mediaRecorder) {
+//     clearAudioData()
 
-const startRecording = async () => {
-  if (isRecording.value) {
-    return
-  }
-  if (mediaRecorder) {
-    clearAudioData()
+//     mediaRecorder.start()
+//     console.log(mediaRecorder.state)
+//     console.log('recording started')
+//   }
+// try {
 
-    mediaRecorder.start()
-    console.log(mediaRecorder.state)
-    console.log('recording started')
-  }
-  // try {
+// } catch (error) {
+//   console.error('Error getting user audio: ', error)
+// }
+//   isRecording.value = true
+//   console.log(isRecording.value)
+// }
 
-  // } catch (error) {
-  //   console.error('Error getting user audio: ', error)
-  // }
-  isRecording.value = true
-  console.log(isRecording.value)
-}
-const stopRecording = () => {
-  if (!isRecording.value) {
-    return
-  } else {
-    if (mediaRecorder) {
-      mediaRecorder.stop()
-      console.log(mediaRecorder.state)
-      console.log('recording ended')
-    }
-    isRecording.value = false
-  }
-  console.log(isRecording.value)
-}
+// const clearAudioData = () => {
+//   if (audioURL.value) {
+//     URL.revokeObjectURL(audioURL.value)
+//     audioURL.value = ''
+//   }
+//   if (recordedBlob.value) {
+//     recordedBlob.value = null
+//     audioChunks = []
+//   }
+// }
 
-const sendAudioToBackend = async (audioBlob: Blob) => {
-  const formData = new FormData()
-  formData.append('audio', audioBlob, 'recording.webm')
-  try {
-    const response = await fetch('http://localhost:5000/api/transcribe', {
-      method: 'POST',
-      body: formData,
-    })
-    if (response.ok) {
-      const data = (await response.json()) as TranscriptionResponse
-      userInput.value = ''
-      userInput.value = data.text
-    }
-  } catch (error) {
-    console.error('There was an error sending the audio to the server.', error)
-  }
-}
+// const wordsToDisplay = ref<string[]>([])
+// const currentWord = ref<number>(0)
 
-const clearAudioData = () => {
-  if (audioURL.value) {
-    URL.revokeObjectURL(audioURL.value)
-    audioURL.value = ''
-  }
-  if (recordedBlob.value) {
-    recordedBlob.value = null
-    audioChunks = []
-  }
-}
+// const increaseCurrentWordNumber = () => {
+//   ++currentWord.value
+// }
 
-const wordsToDisplay = ref<string[]>([])
-const currentWord = ref<number>(0)
+// const startAssessment = async () => {
+//   try {
+//     const response = await fetch('http://localhost:5000/api/words')
+//     if (response.ok) {
+//       isTesting.value = true
+//       startRecording()
+//       const result = (await response.json()) as WordList
 
-const increaseCurrentWordNumber = () => {
-  ++currentWord.value
-}
-
-const startAssessment = async () => {
-  try {
-    const response = await fetch('http://localhost:5000/api/words')
-    if (response.ok) {
-      isTesting.value = true
-      startRecording()
-      const result = (await response.json()) as WordList
-
-      wordsToDisplay.value = result.data
-    }
-  } catch (error) {
-    console.error('There was an error getting the necessary data to begin the assessment.', error)
-  }
-}
-const clearAssessment = async () => {
-  try {
-    const response = await fetch('http://localhost:5000/api/words/clear', { method: 'POST' })
-    if (response.ok) {
-      isRecording.value = false
-      isTesting.value = false
-      audioURL.value = ''
-      audioChunks = []
-      recordedBlob.value = null
-      wordsToDisplay.value = []
-      currentWord.value = 0
-    }
-  } catch (error) {
-    console.error('There was an error clearing the previous assessment.', error)
-  }
-}
+//       wordsToDisplay.value = result.data
+//     }
+//   } catch (error) {
+//     console.error('There was an error getting the necessary data to begin the assessment.', error)
+//   }
+// }
+// const clearAssessment = async () => {
+//   try {
+//     const response = await fetch('http://localhost:5000/api/words/clear', { method: 'POST' })
+//     if (response.ok) {
+//       isRecording.value = false
+//       isTesting.value = false
+//       audioURL.value = ''
+//       audioChunks = []
+//       recordedBlob.value = null
+//       wordsToDisplay.value = []
+//       currentWord.value = 0
+//     }
+//   } catch (error) {
+//     console.error('There was an error clearing the previous assessment.', error)
+//   }
+// }
 </script>
 
 <template>
   <Suspense>
-    <SingleWordView />
+    <RouterView />
   </Suspense>
   <!-- <div class="mx-8 mt-20">
     <div v-if="!isTesting" class="mb-10">

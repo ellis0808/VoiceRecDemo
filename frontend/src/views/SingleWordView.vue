@@ -1,28 +1,49 @@
 <script setup lang="ts">
 import DisplayWords from '@/components/DisplayWords.vue'
 import { useAssessmentStore } from '@/stores/assessmentStore'
-import { CurrentTestingStatus } from '../../../shared/types'
+import { currentTestingStatus } from '../../../shared/types'
+import ChooseAssessment from '@/components/ChooseAssessment.vue'
+import StartEndCancelSessionButton from '@/components/StartEndCancelSessionButton.vue'
 import { onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 
 const assessmentStore = useAssessmentStore()
 
 await assessmentStore.loadMediaRecorder()
 
-const startAssessment = async () => {
-  await assessmentStore.loadWords()
+const startTest = async () => {
+  if (!assessmentStore.isLive) return
+  // await assessmentStore.loadWords()
+  assessmentStore.convertAssessmentBEToFE()
   assessmentStore.toggleTestingState(true)
-  assessmentStore.setCurrentTimeLimit(5)
+  assessmentStore.setCurrentTimeLimit(3)
   assessmentStore.startTimer()
-  assessmentStore.currentTestStatus = CurrentTestingStatus.inProgress
+  assessmentStore.currentAssessmentStatus = currentTestingStatus.inProgress
 }
+
+onMounted(() => {
+  assessmentStore.establishWebsocketConnection()
+})
 </script>
 
 <template>
-  <div
-    v-if="!assessmentStore.isTesting && assessmentStore.currentTestStatus === 'notTesting'"
-    class="mb-10"
-  >
-    <button class="bg-green-900 py-2 px-4 rounded-lg text-white text-2xl" @click="startAssessment">
+  <div class="mb-30">
+    <ChooseAssessment />
+  </div>
+
+  <div class="flex gap-20 mb-10">
+    <div class="flex ml-auto mr-auto">
+      <StartEndCancelSessionButton :purpose="assessmentStore.isLive ? 'end' : 'start'" />
+    </div>
+    <div v-if="assessmentStore.isLive" class="mr-auto">
+      <StartEndCancelSessionButton :purpose="'cancel'" />
+    </div>
+  </div>
+
+  <hr />
+
+  <div v-if="assessmentStore.isLive" class="my-10">
+    <button class="bg-green-900 py-2 px-4 rounded-lg text-white text-2xl" @click="startTest">
       Start Test
     </button>
   </div>
@@ -36,7 +57,7 @@ const startAssessment = async () => {
       <div
         class="cursor-pointer"
         @click="
-          assessmentStore.isTiming && assessmentStore.currentTestStatus === 'inProgress'
+          assessmentStore.isTiming && assessmentStore.currentAssessmentStatus === 'inProgress'
             ? assessmentStore.displayNewItem()
             : ''
         "
@@ -47,9 +68,24 @@ const startAssessment = async () => {
         {{ assessmentStore.currentItemTimer }}
       </div>
     </div>
-    <div class="text-3xl" @click="assessmentStore.stopTimer">Stop</div>
+    <div
+      class="text-3xl"
+      @click="
+        (assessmentStore.stopTimer(),
+        assessmentStore.endAssessment(),
+        assessmentStore.finishAssessment())
+      "
+    >
+      Stop
+    </div>
   </div>
-  <div v-else-if="!assessmentStore.isTesting && assessmentStore.currentTestStatus === 'finished'">
+  <div
+    v-else-if="!assessmentStore.isTesting && assessmentStore.currentAssessmentStatus === 'finished'"
+  >
     <span class="text-5xl"> Finished! </span>
   </div>
+  <hr />
+  <RouterLink to="/user">
+    <div class="text-2xl">Student Tests</div>
+  </RouterLink>
 </template>

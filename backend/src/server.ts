@@ -3,14 +3,26 @@ import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import userRouter from "./routes/userRoutes.ts";
 import assessmentRouter from "./routes/assessmentRoutes.ts";
+import { WebSocketServer } from "ws";
 
 const app: Express = express();
 const port = 5000;
-
 app.use(cors());
 app.use(express.json());
 app.use("/users", userRouter);
 app.use("/assessment", assessmentRouter);
+
+const wss = new WebSocketServer({ port: 8080 });
+app.set("wss", wss);
+
+wss.on("connection", function connection(ws) {
+  ws.on("error", console.error);
+  ws.on("message", function message(data) {
+    console.log("received: %s", data);
+  });
+
+  ws.send(JSON.stringify("something"));
+});
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Up and running!");

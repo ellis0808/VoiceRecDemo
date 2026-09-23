@@ -10,6 +10,6 @@ const db: Database.Database = new Database(dbPath, {
   timeout: 5000,
   verbose: console.log
 });
+db.defaultSafeIntegers(false);
 db.pragma("journal_mode = WAL");
-
 export default db;

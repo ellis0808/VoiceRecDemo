@@ -42,5 +42,6 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
     "allowImportingTsExtensions": true
-  }
+  },
+  "vueCompilerOptions": { "strictTemplates": true }
 }
