@@ -1,16 +1,18 @@
-import { createMemoryHistory, createRouter } from 'vue-router'
-
+import { createRouter, createWebHistory } from 'vue-router'
+import Login from '@/components/Login.vue'
+import TeacherHomeView from '@/views/TeacherHomeView.vue'
+import StudentAllTestResults from '@/components/StudentAllTestResults.vue'
 import SingleWordView from '@/views/SingleWordView.vue'
-import ChooseAssessment from '@/components/ChooseAssessment.vue'
-import UserPage from '@/components/UserPage.vue'
 
 const routes = [
-  { path: '/', name: 'main', component: SingleWordView },
-  { path: '/user', name: 'user', component: UserPage },
+  { path: '/login', name: 'login', component: Login },
+  { path: '/user', name: 'user', component: StudentAllTestResults },
+  { path: '/teacherhome', name: 'teacherHome', component: TeacherHomeView },
+  { path: '/studenthome', name: 'studentHome', component: SingleWordView },
 ]
 
 export const router = createRouter({
-  history: createMemoryHistory(),
+  history: createWebHistory(),
   routes,
 })
 

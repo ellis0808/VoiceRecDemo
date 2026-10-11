@@ -9,11 +9,15 @@ import type {
   AssessmentObject,
   WordTestsBEObject,
   WordTestsFEObject,
-  UserTestDataObject
+  UserTestDataObject,
+  TargetTestDbRow
 } from "../../../shared/types.ts";
 import type { WebSocketServer } from "ws";
+import jwt from "jsonwebtoken";
+import type CustomWebSocket from "../server.ts";
+import convertAssessmentBEToFE from "../utils/convertor.ts";
 
-const assessmentRouter = express.Router();
+const teacherRouter = express.Router();
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -28,14 +32,6 @@ interface TargetWordDbRow {
   arpabet: string;
   unit: string;
   test: string;
-}
-interface TargetTestDbRow {
-  schoolId: number;
-  name: string;
-  testId: number;
-  wordId: number;
-  word: string;
-  arpabet: string;
 }
 
 interface AudioRow {
@@ -92,7 +88,7 @@ const getAssessmentQuestionsStmt = db.prepare(
   "SELECT * FROM studentAssessments WHERE id = ? AND schoolId = ? AND userId = ? AND assessmentSessionId = ? AND testId = ?"
 );
 const addAssessmentSessionStmt = db.prepare(
-  "INSERT INTO assessmentSessions (schoolId, userId, status, timeStarted) VALUES (?, ?, ?, ?)"
+  "INSERT INTO assessmentSessions (schoolId, userId, status, classesAssigned, timeStarted) VALUES (?, ?, ?, ?, ?)"
 );
 const finishAssessmentSessionStmt = db.prepare(
   "UPDATE assessmentSessions SET status = ?, timeEnded = ? WHERE id = ? AND userId = ? AND schoolId = ?"
@@ -121,22 +117,21 @@ const getAllStudentAssessmentsStmt = db.prepare(
   "SELECT * FROM studentAssessments WHERE schoolId = ? AND userId = ? AND assessmentSessionID NOT NULL GROUP BY assessmentSessionId, testId"
 );
 
-assessmentRouter.get(
-  "/tests/user/:schoolId/:userId",
+teacherRouter.get(
+  "/assessment/tests/user/:schoolId/:userId",
   (req: Request, res: Response<ApiResponse<UserTestDataObject[], null>>) => {
     const { schoolId, userId } = req.params;
-    console.log(schoolId);
     const rawRows = getAllStudentAssessmentsStmt.all(
       schoolId,
       userId
     ) as UserTestDataObject[];
-    const safeParse = (val: unknown) => {
-      if (typeof val !== "string") return val;
+    const safeParse = (value: unknown) => {
+      if (typeof value !== "string") return value;
       try {
-        const parsed = JSON.parse(val);
+        const parsed = JSON.parse(value);
         return typeof parsed === "string" ? JSON.parse(parsed) : parsed;
       } catch {
-        return val;
+        return value;
       }
     };
     const preppedRows: UserTestDataObject[] = rawRows?.map((row) => ({
@@ -151,8 +146,8 @@ assessmentRouter.get(
   }
 );
 
-assessmentRouter.get(
-  "/:schoolId/:userId/:assessmentId/audio",
+teacherRouter.get(
+  "/assessment/:schoolId/:userId/:assessmentId/audio",
   (req: Request, res: Response<ApiResponse<AudioRow[], null>>) => {
     const { schoolId, userId, assessmentId } = req.params;
 
@@ -167,11 +162,10 @@ assessmentRouter.get(
   }
 );
 
-assessmentRouter.get(
-  "/tests/:schoolId",
+teacherRouter.get(
+  "/assessment/tests/:schoolId",
   (req: Request, res: Response<ApiResponse<WordTestsFEObject[], null>>) => {
     const { schoolId } = req.params;
-    console.log(schoolId);
 
     const rawRows = getAllTestsStmt.all(schoolId) as TargetTestDbRow[];
 
@@ -187,53 +181,95 @@ assessmentRouter.get(
     });
   }
 );
-assessmentRouter.post(
-  "/sessions",
-  (req: Request, res: Response<ApiResponse<number, null>>) => {
-    const { schoolId, user } = req.body;
+teacherRouter.post(
+  "/assessment/sessions",
+  async (req: Request, res: Response<ApiResponse<number, null>>) => {
+    const { schoolId, userId, selectedClasses, assessmentData } = req.body;
+
+    if (!schoolId || !userId || !selectedClasses)
+      res.status(400).json({
+        success: false,
+        error:
+          "Missing required fields: school id, user id, selected classes, or assessment data"
+      });
+    const frontendAssessmentData =
+      await convertAssessmentBEToFE(assessmentData);
 
     const startTime = Date.now();
+    let info;
 
-    const info = addAssessmentSessionStmt.run(
-      schoolId,
-      user,
-      "in progress",
-      startTime
-    );
+    try {
+      info = addAssessmentSessionStmt.run(
+        schoolId,
+        Number(userId),
+        "in progress",
+        JSON.stringify(selectedClasses),
+        startTime
+      );
+      console.log(
+        "schoolid ",
+        schoolId,
+        "userid ",
+        userId,
+        "classes ",
+        selectedClasses
+      );
+    } catch (err) {
+      console.error("problem posting to the db: ", err);
+    }
+
+    console.log("session number: ", info?.lastInsertRowid);
+
     const wss = req.app.get("wss") as WebSocketServer;
 
     const payload = JSON.stringify({
       type: "session-started",
-      data: "Session Live!"
+      message: "Session Live!",
+      data: {
+        sessionId: info?.lastInsertRowid,
+        assessmentData: frontendAssessmentData
+      }
     });
 
+    console.log(payload);
+
     wss.clients.forEach((client) => {
-      if (client.readyState === 1) {
-        client.send(payload);
+      const studentSocket = client as CustomWebSocket;
+
+      if (
+        client.readyState === 1 &&
+        studentSocket.classId !== undefined &&
+        selectedClasses.includes(studentSocket.classId)
+      ) {
+        console.log("test 2");
+
+        studentSocket.send(payload);
       }
     });
 
     res.status(201).json({
       success: true,
-      data: [Number(info.lastInsertRowid)]
+      data: [Number(info?.lastInsertRowid)]
     });
   }
 );
-assessmentRouter.patch(
-  "/sessions",
+teacherRouter.patch(
+  "/assessment/sessions",
   (req: Request, res: Response<ApiResponse<string, null>>) => {
     const { user, assessmentSessionId, status, schoolId } = req.body;
+    console.log("req.body: ", req.body);
+
     const endTime = Date.now();
-    finishAssessmentSessionStmt.run(
+    const patch = finishAssessmentSessionStmt.run(
       status,
       endTime,
       assessmentSessionId,
       user,
       schoolId
     );
+    console.log(patch);
 
     const wss = req.app.get("wss") as WebSocketServer;
-
     const payload = JSON.stringify({
       type: "session-ended",
       data: "Session Ended!"
@@ -252,198 +288,32 @@ assessmentRouter.patch(
     });
   }
 );
-assessmentRouter.post(
-  "/studentassessments",
-  (req: Request, res: Response<ApiResponse<number, null>>) => {
-    const {
-      schoolId,
-      studentId,
-      testId,
-      status,
-      currentAssessmentSessionID,
-      payload
-    } = req.body;
-    const currentTime = Date.now();
-    const info = addAssessmentQuestionsStmt.run(
-      schoolId,
-      studentId,
-      currentAssessmentSessionID,
-      testId,
-      status,
-      payload,
-      currentTime
+
+teacherRouter.post(
+  "/assessment/targetWords",
+  (req: Request, res: Response) => {}
+);
+
+teacherRouter.post(
+  "/assessment/targetWords/add",
+  (req: Request, res: Response) => {
+    const info = insertWordStmt.run(
+      JSON.stringify(wordVariations),
+      JSON.stringify(phonemetizedWord),
+      null,
+      null
     );
 
-    res.status(200).json({
-      success: true,
-      data: [Number(info.lastInsertRowid)]
-    });
-  }
-);
-assessmentRouter.patch(
-  "/studentassessments",
-  (req: Request, res: Response<ApiResponse<null, null>>) => {
-    const currentTime = Date.now();
-  }
-);
-
-assessmentRouter.post("/targetWords", (req: Request, res: Response) => {});
-
-assessmentRouter.post("/targetWords/add", (req: Request, res: Response) => {
-  const info = insertWordStmt.run(
-    JSON.stringify(wordVariations),
-    JSON.stringify(phonemetizedWord),
-    null,
-    null
-  );
-
-  try {
-    res.status(201).json({
-      success: true,
-      id: info.lastInsertRowid,
-      message: "Word successfully added"
-    });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
-const transcribeAudioArray = async (audioFile: File): Promise<string[]> => {
-  const transcription = await openai.audio.transcriptions.create({
-    file: audioFile,
-    model: "whisper-1",
-    language: "en",
-    response_format: "verbose_json",
-    timestamp_granularities: ["word"]
-  });
-  const answer = await getPhonemes(transcription.text);
-  console.log(answer);
-
-  return answer;
-};
-
-assessmentRouter.post(
-  "/transcribe",
-  upload.array("audio", 10),
-  async (req: Request, res: Response) => {
-    const {
-      assessmentId,
-      schoolId,
-      userId,
-      testId,
-      assessmentSessionId,
-      wordData
-    } = req.body;
-
-    const wordDataObject = JSON.parse(wordData) as WordTestsBEObject[];
-    const wordIdData = wordDataObject.map((item) => item.wordId);
-    console.log(wordIdData);
-
-    const endingTime = Date.now();
-    let assessmentQuestions;
-    let assessmentInfo;
-
     try {
-      assessmentInfo = (await getAssessmentQuestionsStmt.get(
-        assessmentId,
-        schoolId,
-        userId,
-        assessmentSessionId,
-        testId
-      )) as AssessmentObject;
-
-      assessmentQuestions = JSON.parse(assessmentInfo.questions);
-    } catch (err) {
-      console.error("Error retrieving assessment object: ", err);
-      res
-        .status(500)
-        .json("There was an error retrieving the test data from the database.");
-    }
-    try {
-      const files = req.files as Express.Multer.File[];
-      if (!req.files || req.files.length === 0) {
-        return res
-          .status(400)
-          .json({ success: false, message: "No files provided" });
-      }
-
-      const transcriptionPromises = files.map(async (file, index) => {
-        const audioFile = await toFile(file.buffer, file.originalname, {
-          type: file.mimetype
-        });
-
-        addAudioDataStmt.run(
-          file.buffer,
-          file.mimetype,
-          schoolId,
-          userId,
-          assessmentId,
-          wordIdData[index]
-        );
-        return transcribeAudioArray(audioFile);
-      });
-
-      const results = await Promise.all(transcriptionPromises);
-
-      const transcriptions = results.map((result) => result) as string[][];
-
-      console.log("transcriptions: ", transcriptions);
-      const checkedResults = [];
-      try {
-        if (transcriptions) {
-          for (let i = 0; i < transcriptions.length; ++i) {
-            if (
-              checkAnswer(
-                transcriptions[i] ?? [],
-                assessmentQuestions[i].arpabet[0]
-              )
-            ) {
-              checkedResults.push({
-                id: assessmentQuestions[i].id,
-                listNumber: assessmentQuestions[i].listNumber,
-                question: assessmentQuestions[i].arpabet[0],
-                answer: transcriptions[i] ?? [],
-                result: true
-              });
-            } else {
-              checkedResults.push({
-                listNumber: assessmentQuestions[i].listNumber,
-                question: assessmentQuestions[i].arpabet[0],
-                answer: transcriptions[i] ?? [],
-                result: false
-              });
-            }
-          }
-        }
-        console.log(checkedResults);
-      } catch (err) {
-        console.error("Error checking user answer: ", err);
-      }
-      try {
-        updateAssessmentQuestionsStmt.run(
-          "finished",
-          JSON.stringify(transcriptions),
-          endingTime,
-          assessmentId,
-          schoolId,
-          userId,
-          assessmentSessionId,
-          testId
-        );
-      } catch (err) {
-        console.error(
-          "There was an error saving the answers to this assessment: ",
-          err
-        );
-      }
-      res.status(200).json({
+      res.status(201).json({
         success: true,
-        data: { checkedResults }
+        id: info.lastInsertRowid,
+        message: "Word successfully added"
       });
     } catch (err) {
-      console.error("Error transcribing text:", err);
-      res.status(500).json({ error: "Unable to transcribe audio." });
+      res.status(500).json({ error: (err as Error).message });
     }
   }
 );
 
-export default assessmentRouter;
+export default teacherRouter;

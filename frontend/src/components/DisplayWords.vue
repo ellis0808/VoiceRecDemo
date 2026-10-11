@@ -1,19 +1,17 @@
 <script setup lang="ts">
-import { useAssessmentStore } from '@/stores/assessmentStore'
+import { useStudentStore } from '@/stores/studentStore'
 
-const assessmentStore = useAssessmentStore()
-
-const targetPhonemes: string[][] = []
+const studentStore = useStudentStore()
 </script>
 
 <template>
-  <div v-if="assessmentStore.currentTargetWords">
+  <div v-if="studentStore.currentTargetWords">
     <div
-      v-for="(item, index) in assessmentStore.currentTargetWords"
+      v-for="(item, index) in studentStore.currentTargetWords"
       class="w-full h-full mt-2 text-8xl"
     >
-      <div class="w-full h-full" v-if="index === assessmentStore.currentDisplayWordCount">
-        {{ assessmentStore.isTiming ? item.word[0] : '' }}
+      <div class="w-full h-full" v-if="index === studentStore.currentDisplayWordCount">
+        {{ studentStore.isTiming ? item.word[0] : '' }}
       </div>
     </div>
   </div>

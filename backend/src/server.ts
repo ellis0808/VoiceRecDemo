@@ -1,27 +1,72 @@
 import "dotenv/config";
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
+import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
+import { WebSocket, WebSocketServer } from "ws";
+import authRouter from "./routes/authRoutes.ts";
 import userRouter from "./routes/userRoutes.ts";
-import assessmentRouter from "./routes/assessmentRoutes.ts";
-import { WebSocketServer } from "ws";
+import teacherRouter from "./routes/teacherRoutes.ts";
+import studentRouter from "./routes/studentRoutes.ts";
 
 const app: Express = express();
 const port = 5000;
 app.use(cors());
 app.use(express.json());
+app.use("/auth", authRouter);
 app.use("/users", userRouter);
-app.use("/assessment", assessmentRouter);
+app.use("/teacher", teacherRouter);
+app.use("/student", studentRouter);
+
+dotenv.config({ path: "./secrets.env" });
+if (!process.env.JWT_SECRET) {
+  throw new Error("Missing JWT_SECRET in env variables!");
+}
+const secret = process.env.JWT_SECRET as string;
+
+export default interface CustomWebSocket extends WebSocket {
+  userId?: number;
+  classId?: number | undefined;
+}
 
 const wss = new WebSocketServer({ port: 8080 });
 app.set("wss", wss);
 
-wss.on("connection", function connection(ws) {
+wss.on("connection", (ws: CustomWebSocket, req) => {
+  const requestUrl = new URL(req.url || "", "http://localhost");
+  if (requestUrl) {
+    const token = requestUrl.searchParams.get("token");
+    console.log("token:", token);
+    console.log("secret:", secret);
+
+    const classId = requestUrl.searchParams.get("classId");
+    console.log("english class id: ", classId);
+
+    if (token) {
+      try {
+        const user = jwt.verify(token, secret);
+        ws.classId = Number(classId) || undefined;
+        console.log("user data: ", user);
+        const payload = JSON.stringify({
+          type: "student-connected",
+          message: "Here we are~~~!"
+        });
+        ws.send(payload);
+      } catch (err) {
+        console.error(
+          "There was an error establishing the ws connection: ",
+          err
+        );
+        ws.close(4003, "Invalid token");
+        return;
+      }
+    }
+  }
+
   ws.on("error", console.error);
   ws.on("message", function message(data) {
     console.log("received: %s", data);
   });
-
-  ws.send(JSON.stringify("something"));
 });
 
 app.get("/", (req: Request, res: Response) => {

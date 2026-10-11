@@ -40,3 +40,10 @@ __screenshots__/
 
 # Secrets
 backend/.env
+backend/secrets.env
+backend/src/utils/keyGen.ts
+backend/src/utils/hasher.ts
+
+# Diagrams
+System Diagram.afdesign
+System Diagram.afdesign~lock~

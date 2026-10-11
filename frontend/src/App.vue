@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import SingleWordView from './views/SingleWordView.vue'
+import { onMounted } from 'vue'
+import { useAuthStore } from './stores/authStore'
+
+const authStore = useAuthStore()
 
 // const assessmentStore = useAssessmentStore()
 // const userStore = useUserStore()
@@ -117,6 +120,10 @@ import SingleWordView from './views/SingleWordView.vue'
 //     console.error('There was an error clearing the previous assessment.', error)
 //   }
 // }
+
+onMounted(() => {
+  authStore.checkLoginStatus()
+})
 </script>
 
 <template>

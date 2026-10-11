@@ -7,6 +7,21 @@ export interface TargetWordBEObject {
   name?: string;
 }
 
+export interface Test {
+  id: number;
+  schoolId: number;
+  dateCreated: number;
+  dateModified: number;
+  type: string;
+  gradeLevel: number;
+  testData: TestData;
+}
+
+export interface TestData {
+  questions: string[];
+  answers: string[];
+}
+
 export type TargetWordFEObject = Omit<TargetWordBEObject, "arpabet"> & {
   listNumber: number;
 };
@@ -54,6 +69,16 @@ export interface WordTestsArray {
 export interface TestItems {
   testItems: WordTestsBEObject[];
 }
+
+export interface TargetTestDbRow {
+  schoolId: number;
+  name: string;
+  testId: number;
+  wordId: number;
+  word: string;
+  arpabet: string;
+}
+
 export interface WordTestsBEObject {
   schoolId: number;
   testId: number;
@@ -73,9 +98,11 @@ export interface UserTestDataObject {
   schoolId: number;
   userId: number;
   testId: number;
+  assessmentSessionId: number;
   questions: WordTestsBEObject[];
   answersArpabet: string;
   answersAudio?: Blob[];
+  score: number;
 }
 
 export interface UserLoadedAudio {
@@ -85,8 +112,57 @@ export interface UserLoadedAudio {
   studentAssessmentId: number;
   questionId: number;
   audio: { type: string; data: [] };
-  audioUrl: string;
+  audioUrl?: string;
   mimeType: string;
+}
+
+export interface School {
+  id: number;
+  name: string;
+  shortName: string;
+}
+
+export interface SchoolClass {
+  id: number;
+  schoolId: number;
+  name: string;
+  teacherId: number;
+}
+
+export interface User {
+  id: number;
+  schoolId: number;
+  email?: string;
+  username: string;
+  lastName: string;
+  firstName: string;
+  dateAdded: number;
+  role: string;
+}
+
+export interface TestResults {
+  id: number;
+  listNumber: number;
+  question: string;
+  answer: string[];
+  result?: boolean;
+  score?: number;
+}
+
+export interface CheckResults {
+  score: number;
+  correct: string[];
+  incorrect: string[];
+}
+
+export interface Teacher extends User {
+  english: number;
+}
+export interface Student extends User {
+  studentNumber: number;
+  matriculationYear: number;
+  englishClass: number;
+  homeroom: number;
 }
 
 export interface ApiResponse<T, U> {

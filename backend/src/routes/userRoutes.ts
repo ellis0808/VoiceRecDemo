@@ -4,7 +4,7 @@ import db from "../config/db.ts";
 const userRouter = express.Router();
 
 const getAllStudentsStmt = db.prepare(
-  "SELECT u.lastName, u.firstName, u.schoolId, s.userId, s.studentNumber, s.year, s.englishClass, s.homeroom, sa.assessmentSessionId, sa.testId, sa.status, sa.questions, sa.answersArpabet, sa.score FROM students s LEFT JOIN studentAssessments sa ON s.userId = sa.userId LEFT JOIN users u ON u.id = s.userId WHERE u.schoolId = ?"
+  "SELECT u.lastName, u.firstName, u.schoolId, s.userId, s.studentNumber, s.matriculationYear, s.englishClass, s.homeroom, sa.assessmentSessionId, sa.testId, sa.status, sa.questions, sa.answersArpabet, sa.score FROM students s LEFT JOIN studentAssessments sa ON s.userId = sa.userId LEFT JOIN users u ON u.id = s.userId WHERE u.schoolId = ?"
 );
 const getIndividualStudentStmt = db.prepare(
   "SELECT * FROM students s LEFT JOIN users u WHERE u.id = ? AND u.schoolId = ?"
