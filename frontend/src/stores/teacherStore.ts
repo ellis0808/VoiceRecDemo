@@ -366,6 +366,8 @@ export const useTeacherStore = defineStore('teacherStore', {
         if (!response.ok) throw new Error()
         if (response.ok) {
           window.alert('Tests successfully uploaded!')
+          this.testDataImport.dataForSaving = []
+          this.testDataImport.preSavedWordData = []
         }
       } catch (error) {
         console.error('There was an error saving the uploaded tests')

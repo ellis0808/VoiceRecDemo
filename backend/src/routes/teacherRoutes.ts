@@ -131,24 +131,28 @@ const addNewTestStmt = db.prepare(
   "INSERT INTO tests (name, focus) VALUES (?, ?)"
 );
 
+const addNewTestWordsStmt = db.prepare(
+  "INSERT INTO testWords (schoolId, testId, wordId) VALUES (?, ?, ?)"
+);
+
 teacherRouter.post(
   "/assessment/upload/save",
   async (req: Request, res: Response<ApiResponse<null, null>>) => {
-    const { schoolId, userId } = req.body;
+    const { schoolId, userId, newTests } = req.body;
     // console.log(newTests);
 
-    const newTests = [
-      {
-        name: "new test",
-        data: [
-          {
-            word: ["domf", "", ""],
-            arpabet: [["D", "AH", "M", "F"]],
-            unit: null
-          }
-        ]
-      }
-    ];
+    // const newTests = [
+    //   {
+    //     name: "new test",
+    //     data: [
+    //       {
+    //         word: ["domf", "", ""],
+    //         arpabet: [["D", "AH", "M", "F"]],
+    //         unit: null
+    //       }
+    //     ]
+    //   }
+    // ];
     if (!schoolId)
       return res
         .status(400)
@@ -165,43 +169,48 @@ teacherRouter.post(
       maxVal: number | null;
     }
     const result = findHighestTestIdStmt.get() as MaxResult;
-    console.log("max id number: ", result);
-    console.log("number of tests: ", newTestsObject.length);
     for (let i = 1; i < newTestsObject.length + 1; ++i) {
-      console.log("result: ", result.maxVal);
-
       if (typeof result.maxVal === "number") {
-        console.log("it's a number!");
-
         const num = result.maxVal + i;
-        console.log("new number: ", num);
 
         newTestNumbersArray.push(num);
       }
-      console.log("new test numbers: ", newTestNumbersArray);
     }
 
-    const newWordsIdArray: number[] = [];
+    const newWordsIdArray: number[][] = [];
     let addedWord;
-    const individualWords = newTestsObject.map((group) =>
-      group.map((item) => {
+    const individualWords = newTestsObject.map((testGroup, index) => {
+      newWordsIdArray.push([]);
+      testGroup.data.map((item, itemIndex) => {
         addedWord = addTargetWordsStmt.run(
           schoolId,
           JSON.stringify(item.word),
           JSON.stringify(item.arpabet),
           item.unit
         );
-        newWordsIdArray.push(Number(addedWord.lastInsertRowid));
-      })
-    );
+        console.log("word rowid: ", addedWord.lastInsertRowid);
+        newWordsIdArray[index]?.push(Number(addedWord.lastInsertRowid));
+      });
+    });
     const wordUploadResults = await Promise.all(individualWords);
-    console.log(uploadResults);
 
     const individualTests = newTestsObject.map((group) =>
       addNewTestStmt.run(group.name, null)
     );
 
     const testUploadResults = await Promise.all(individualTests);
+    console.log("words: ", wordUploadResults);
+    console.log("tests: ", testUploadResults);
+    console.log("new words id array: ", newWordsIdArray);
+    console.log("new tests id array: ", newTestNumbersArray);
+
+    const testWordsAssociation = newWordsIdArray.map((wordArray, index) => {
+      wordArray.map((word) => {
+        addNewTestWordsStmt.run(schoolId, newTestNumbersArray[index], word);
+      });
+    });
+
+    const newTestWords = await Promise.all(testWordsAssociation);
 
     res.status(200).json({ success: true });
   }
