@@ -12,10 +12,12 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
-    "@primeicons/vue": "^8.0.0-alpha.1",
+    "@primeicons/vue": "^8.0.2",
+    "@primevue/icons": "^5.0.2",
     "@tailwindcss/vite": "^4.3.2",
     "jwt-decode": "^4.0.0",
     "pinia": "^4.0.3",
+    "primeicons": "^8.0.2",
     "tailwindcss": "^4.3.2",
     "vue": "^3.5.38",
     "vue-router": "^5.3.1"

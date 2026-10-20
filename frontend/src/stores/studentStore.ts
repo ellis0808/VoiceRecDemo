@@ -257,7 +257,9 @@ export const useStudentStore = defineStore('studentStore', {
     async sendAudioToBackend(audioData: Blob[]) {
       const schoolId = this.user?.schoolId
       const userId = this.user?.id
-      const testId = 1 // ??
+      const testId = this.currentTargetWords[0]?.test
+      console.log('testId:', testId)
+
       const assessmentId = this.currentAssessmentId
       console.log(assessmentId)
 
@@ -287,6 +289,7 @@ export const useStudentStore = defineStore('studentStore', {
           method: 'POST',
           body: formData,
         })
+        if (!response.ok) throw new Error()
         if (response.ok) {
           const data = (await response.json()) as TranscriptionResponse
           console.log(data)

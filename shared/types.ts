@@ -16,6 +16,11 @@ export interface Test {
   gradeLevel: number;
   testData: TestData;
 }
+export interface NewTest {
+  type: string;
+  focus: string;
+  testData: TestData;
+}
 
 export interface TestData {
   questions: string[];
@@ -170,6 +175,28 @@ export interface ApiResponse<T, U> {
   data?: [T, U?];
   error?: string;
 }
+
+export interface ImportedWord {
+  word: string;
+  alt1: string;
+  alt2: string;
+  unit: number;
+  testSegment: string | null;
+}
+
+export interface ConvertedWord {
+  word: string;
+  arpabet: string;
+  unit: number | null;
+}
+
+export interface NewTestUpload {
+  name: string;
+  focus?: string;
+  data: ConvertedWord[];
+}
+
+export interface ImportedWordsForDisplay {}
 
 export enum currentTestingStatus {
   notTesting = "notTesting",

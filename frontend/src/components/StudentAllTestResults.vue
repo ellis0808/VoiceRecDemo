@@ -20,14 +20,15 @@ const assessmentSessionId = ref<number | null>(null)
 const classStudents = ref<Student[]>([])
 
 const selectClass = async (classId: number) => {
-  if (teacherStore.user) {
-    await authStore.getClasssStudents(teacherStore.user?.schoolId, classId)
-    console.log(authStore.classStudents)
-
-    classStudents.value = authStore.classStudents.filter(
+  if (classId === 0) {
+    classStudents.value = teacherStore.allStudents.filter(
+      (student) =>
+        student.englishClass === 1 || student.englishClass === 2 || student.englishClass === 3,
+    )
+  } else {
+    classStudents.value = teacherStore.allStudents.filter(
       (student) => student.englishClass === classId,
     )
-    console.log(classStudents.value)
   }
 }
 
@@ -54,7 +55,12 @@ const setSingleTestResults = (
   testId.value = tstId
   assessmentSessionId.value = assssSessId
 }
-onMounted(async () => {})
+onMounted(async () => {
+  if (teacherStore.user) {
+    await teacherStore.getAllStudents()
+  }
+  selectClass(0)
+})
 </script>
 
 <template>
@@ -74,8 +80,14 @@ onMounted(async () => {})
           </div>
           <div class="mt-5 mb-10">
             <div class="flex-col">
-              <div v-for="student in classStudents" @click="getAssessments(student.userId)">
-                {{ student.lastName }}, {{ student.firstName }}
+              <div :class="[`grid grid-cols-${authStore.classes.length}`]">
+                <div v-for="(schoolClass, index) in authStore.classes" :style="{ gridRow: 1 }">
+                  {{ schoolClass.name }}
+                </div>
+                <div v-for="student in classStudents" @click="getAssessments(student.userId)">
+                  {{ student.lastName }}, {{ student.firstName }}
+                </div>
+                <div></div>
               </div>
             </div>
           </div>
@@ -98,7 +110,9 @@ onMounted(async () => {})
           )
         "
       >
-        <div class="ml-2 text-lg font-bold">{{ assessment.questions[0]?.name }}</div>
+        <div class="ml-2 text-lg font-bold">
+          {{ assessment.questions[0]?.name }} - {{ assessment.score }} points
+        </div>
         <table>
           <thead>
             <tr class="px-3">

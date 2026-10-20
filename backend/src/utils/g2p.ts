@@ -1,21 +1,25 @@
 import { execFile } from "child_process";
+import { existsSync } from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const getPhonemes = (text: string): Promise<string[]> => {
   return new Promise((resolve, reject) => {
-    const scriptPath = path.join(
-      process.cwd(),
-      "src",
-      "utils",
-      "g2p_helper.py"
-    );
+    const scriptPath = path.join(__dirname, "g2p_helper.py");
 
-    const pythonPath = path.join(
-      process.cwd(),
+    const path1 = path.join(process.cwd(), "venv", "Scripts", "python.exe");
+    const path2 = path.resolve(
+      __dirname,
+      "..",
+      "..",
       "venv",
       "Scripts",
       "python.exe"
     );
+    const pythonPath = existsSync(path1) ? path1 : path2;
     execFile(pythonPath, [scriptPath, text], (err, stdout, stderr) => {
       if (err) {
         return reject(`G2P Execution Error: ${err.message}`);

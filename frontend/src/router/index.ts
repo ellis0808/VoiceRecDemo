@@ -3,11 +3,13 @@ import Login from '@/components/Login.vue'
 import TeacherHomeView from '@/views/TeacherHomeView.vue'
 import StudentAllTestResults from '@/components/StudentAllTestResults.vue'
 import SingleWordView from '@/views/SingleWordView.vue'
+import UploadPreview from '@/views/UploadPreview.vue'
 
 const routes = [
   { path: '/login', name: 'login', component: Login },
   { path: '/user', name: 'user', component: StudentAllTestResults },
   { path: '/teacherhome', name: 'teacherHome', component: TeacherHomeView },
+  { path: '/upload-preview', name: 'uploadPreview', component: UploadPreview },
   { path: '/studenthome', name: 'studentHome', component: SingleWordView },
 ]
 

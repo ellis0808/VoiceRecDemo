@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ChooseAssessment from '@/components/ChooseAssessment.vue'
+import FileUpload from '@/components/FileUpload.vue'
 import StartEndCancelSessionButton from '@/components/StartEndCancelSessionButton.vue'
 import StudentAllTestResults from '@/components/StudentAllTestResults.vue'
 import { useAuthStore } from '@/stores/authStore'
@@ -54,6 +55,9 @@ onMounted(async () => {
     <div v-for="tab in tabsArray" class="ml-10 mr-10 text-lg" @click="changeTabs(tab)">
       {{ tab }}
     </div>
+  </div>
+  <div class="ml-10">
+    <FileUpload />
   </div>
   <div v-if="tabsData.assessments.isVisible">
     <div class="text-2xl mt-10">Welcome back {{ teacherStore.user?.username }}!</div>

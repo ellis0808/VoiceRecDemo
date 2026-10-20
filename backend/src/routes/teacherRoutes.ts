@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from "express";
 import db from "../config/db.ts";
-import multer from "multer";
+import multer, { memoryStorage } from "multer";
 import OpenAI, { toFile } from "openai";
 import { getPhonemes } from "../utils/g2p.ts";
 import type {
@@ -10,12 +10,16 @@ import type {
   WordTestsBEObject,
   WordTestsFEObject,
   UserTestDataObject,
-  TargetTestDbRow
+  TargetTestDbRow,
+  Student,
+  ConvertedWord,
+  NewTestUpload
 } from "../../../shared/types.ts";
 import type { WebSocketServer } from "ws";
 import jwt from "jsonwebtoken";
 import type CustomWebSocket from "../server.ts";
 import convertAssessmentBEToFE from "../utils/convertor.ts";
+import csvUploader from "../utils/csvUploader.ts";
 
 const teacherRouter = express.Router();
 
@@ -105,16 +109,151 @@ const getAllTestsStmt = db.prepare(
   "SELECT t.id AS testId, t.name, t.focus, t.schoolId, tw.wordId, tarw.word, tarw.arpabet FROM tests t LEFT JOIN testWords tw ON t.id = tw.testId LEFT JOIN targetWords tarw ON tw.wordId = tarw.id WHERE tw.schoolId = ? AND tw.testId NOT NULL ORDER BY t.id"
 );
 
-const addAudioDataStmt = db.prepare(
-  "INSERT INTO userAudioData (audio, mimeType, schoolId, userId, studentAssessmentId, questionId) VALUES (?, ?, ?, ?, ?, ?)"
-);
-
 const getAllAudioDataStmt = db.prepare(
   "SELECT * FROM userAudioData WHERE schoolId = ? AND userId = ? AND studentAssessmentId = ?"
 );
 
 const getAllStudentAssessmentsStmt = db.prepare(
   "SELECT * FROM studentAssessments WHERE schoolId = ? AND userId = ? AND assessmentSessionID NOT NULL GROUP BY assessmentSessionId, testId"
+);
+
+const getAllStudentsStmt = db.prepare(
+  "SELECT s.userId, s.studentNumber, s.matriculationYear, s.englishClass, s.homeroom, u.id, username, lastName, firstName, role, dateAdded FROM students s LEFT JOIN users u ON s.userId = u.id WHERE schoolId = ?"
+);
+
+const addTargetWordsStmt = db.prepare(
+  "INSERT INTO targetWords (schoolId, word, arpabet, unit) VALUES (?, ?, ?, ?)"
+); // needs to be updated to not allow duplicates? if a value is already present, then return the one already in the db
+
+const findHighestTestIdStmt = db.prepare("SELECT MAX(id) AS maxVal FROM tests");
+
+const addNewTestStmt = db.prepare(
+  "INSERT INTO tests (name, focus) VALUES (?, ?)"
+);
+
+teacherRouter.post(
+  "/assessment/upload/save",
+  async (req: Request, res: Response<ApiResponse<null, null>>) => {
+    const { schoolId, userId } = req.body;
+    // console.log(newTests);
+
+    const newTests = [
+      {
+        name: "new test",
+        data: [
+          {
+            word: ["domf", "", ""],
+            arpabet: [["D", "AH", "M", "F"]],
+            unit: null
+          }
+        ]
+      }
+    ];
+    if (!schoolId)
+      return res
+        .status(400)
+        .json({ success: false, error: "No new test(s) provided." });
+    if (!newTests)
+      return res
+        .status(400)
+        .json({ success: false, error: "No new test(s) provided." });
+    const newTestsObject = newTests as NewTestUpload[];
+
+    const newTestNumbersArray: number[] = [];
+
+    interface MaxResult {
+      maxVal: number | null;
+    }
+    const result = findHighestTestIdStmt.get() as MaxResult;
+    console.log("max id number: ", result);
+    console.log("number of tests: ", newTestsObject.length);
+    for (let i = 1; i < newTestsObject.length + 1; ++i) {
+      console.log("result: ", result.maxVal);
+
+      if (typeof result.maxVal === "number") {
+        console.log("it's a number!");
+
+        const num = result.maxVal + i;
+        console.log("new number: ", num);
+
+        newTestNumbersArray.push(num);
+      }
+      console.log("new test numbers: ", newTestNumbersArray);
+    }
+
+    const newWordsIdArray: number[] = [];
+    let addedWord;
+    const individualWords = newTestsObject.map((group) =>
+      group.map((item) => {
+        addedWord = addTargetWordsStmt.run(
+          schoolId,
+          JSON.stringify(item.word),
+          JSON.stringify(item.arpabet),
+          item.unit
+        );
+        newWordsIdArray.push(Number(addedWord.lastInsertRowid));
+      })
+    );
+    const wordUploadResults = await Promise.all(individualWords);
+    console.log(uploadResults);
+
+    const individualTests = newTestsObject.map((group) =>
+      addNewTestStmt.run(group.name, null)
+    );
+
+    const testUploadResults = await Promise.all(individualTests);
+
+    res.status(200).json({ success: true });
+  }
+);
+
+teacherRouter.post(
+  "/assessment/upload/new",
+  upload.single("csv_file"),
+  async (req: Request, res: Response<ApiResponse<ConvertedWord[][], null>>) => {
+    const { schoolId, userId } = req.body;
+    try {
+      // const storage = multer.memoryStorage()
+      // const upload = multer({storage: storage})
+
+      // const fileBuffer = req.file?.buffer
+      // const textContent = fileBuffer?.toString('utf-8')
+      const file = req.file as Express.Multer.File;
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({ success: false, error: "No file provided" });
+      }
+      // console.log("File: ", file);
+
+      const newWords = (await csvUploader(file)) as ConvertedWord[][];
+      // console.log("New Words: ", newWords);
+      res.status(200).json({ success: true, data: [newWords, null] });
+    } catch (err) {
+      console.error("Error getting file from Multer: ", err);
+    }
+  }
+);
+
+teacherRouter.get(
+  "/students/:schoolId",
+  (req: Request, res: Response<ApiResponse<Student[], null>>) => {
+    const { schoolId } = req.params;
+    try {
+      const rows = getAllStudentsStmt.all(schoolId) as Student[];
+
+      res.status(200).json({ success: true, data: [rows, null] });
+    } catch (err) {
+      console.error(
+        "There was an error retreiving the students' records: ",
+        err
+      );
+      res.status(400).json({
+        success: false,
+        error: "There was an error retreiving the students' records."
+      });
+    }
+  }
 );
 
 teacherRouter.get(

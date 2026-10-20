@@ -10,9 +10,14 @@ import {
   type UserLoadedAudio,
   type SchoolClass,
   type Teacher,
+  type Student,
+  type ConvertedWord,
+  type NewTest,
+  type NewTestUpload,
 } from '../../../shared/types'
 import { useAuthStore } from './authStore'
 import { jwtDecode, type JwtPayload } from 'jwt-decode'
+import router from '@/router'
 
 export const useTeacherStore = defineStore('teacherStore', {
   state: () => ({
@@ -31,10 +36,16 @@ export const useTeacherStore = defineStore('teacherStore', {
     studentAssessments: [] as UserTestDataObject[],
     studentAssessmentAudio: [] as UserLoadedAudio[],
     selectedClasses: [] as number[],
+    allStudents: [] as Student[],
     wsConnection: {
       websocket: null as WebSocket | null,
       socketConnected: false,
       isLive: false,
+    },
+    testDataImport: {
+      preSavedWordData: [] as ConvertedWord[][],
+      dataForSaving: [] as NewTestUpload[],
+      isProcessing: false,
     },
   }),
   getters: {
@@ -43,11 +54,25 @@ export const useTeacherStore = defineStore('teacherStore', {
         return state.currentAssessment
       }
     },
+    uploadPreview(state) {
+      console.log(state.testDataImport.preSavedWordData)
+
+      return state.testDataImport.preSavedWordData
+    },
   },
   actions: {
-    getAllStudents() {
+    async getAllStudents() {
+      this.allStudents = []
       const schoolId = this.user?.schoolId
       try {
+        const response = await fetch(`http://localhost:5000/teacher/students/${schoolId}`)
+
+        if (!response.ok) throw new Error()
+        if (response.ok) {
+          const result = await response.json()
+          this.allStudents = result.data[0]
+          console.log('All Students: ', this.allStudents)
+        }
       } catch (error) {
         console.error("There was an error getting students' information")
       }
@@ -319,6 +344,73 @@ export const useTeacherStore = defineStore('teacherStore', {
         ;[array[i], array[j]] = [array[j]!, array[i]!]
       }
       return array
+    },
+    async saveNewTests(newTests: NewTestUpload[]) {
+      if (!newTests) throw alert('No test available to save.')
+
+      this.testDataImport.dataForSaving = newTests
+      const schoolId = this.user?.schoolId
+      console.log('SchoolId: ', schoolId)
+      console.log('hello?')
+      const userId = this.user?.id
+      try {
+        const response = await fetch(`http://localhost:5000/teacher/assessment/upload/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            schoolId: schoolId,
+            userId: userId,
+            newTests: this.testDataImport.dataForSaving,
+          }),
+        })
+        if (!response.ok) throw new Error()
+        if (response.ok) {
+          window.alert('Tests successfully uploaded!')
+        }
+      } catch (error) {
+        console.error('There was an error saving the uploaded tests')
+      }
+    },
+    async preUploadNewWords(data: File) {
+      const schoolId = this.user?.schoolId
+      const userId = this.user?.id
+      const formData = new FormData()
+      formData.append('csv_file', data)
+      formData.append('schoolId', `${schoolId}`)
+      formData.append('userId', `${userId}`)
+
+      try {
+        const response = await fetch(`http://localhost:5000/teacher/assessment/upload/new`, {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (!response.ok) throw new Error()
+        if (response.ok) {
+          router.push('/upload-preview')
+          const result = await response.json()
+
+          const data = result.data[0] as ConvertedWord[][]
+          console.log(
+            data.map((item) => {
+              return item.map((thing) => {
+                return {
+                  ...thing,
+                  word: JSON.parse(thing.word),
+                  arpabet: JSON.parse(thing.arpabet),
+                }
+              })
+            }),
+          )
+          this.testDataImport.preSavedWordData = data.map((item) => {
+            return item.map((thing) => {
+              return { ...thing, word: JSON.parse(thing.word), arpabet: JSON.parse(thing.arpabet) }
+            })
+          })
+        }
+      } catch (error) {
+        console.error('There was an error uploading the file.', error)
+      }
     },
   },
 })

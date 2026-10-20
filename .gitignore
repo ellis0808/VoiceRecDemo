@@ -47,3 +47,6 @@ backend/src/utils/hasher.ts
 # Diagrams
 System Diagram.afdesign
 System Diagram.afdesign~lock~
+
+# Extra Files
+/extra/

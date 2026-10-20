@@ -1,9 +1,13 @@
 import Database from "better-sqlite3";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 console.log("db.ts current path: ", process.cwd());
 
-const dbPath: string = path.join(process.cwd(), "db", "data.db");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const dbPath: string = path.resolve(__dirname, "..", "..", "db", "data.db");
 
 const db: Database.Database = new Database(dbPath, {
   fileMustExist: true,
