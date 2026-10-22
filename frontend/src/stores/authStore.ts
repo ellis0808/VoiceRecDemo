@@ -29,7 +29,7 @@ export const useAuthStore = defineStore('authStore', {
         console.log('user: ', usernameOrEmail, 'password: ', password, 'role: ', userRole)
 
         try {
-          const response = await fetch('http://localhost:5000/auth/login', {
+          const response = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -90,7 +90,7 @@ export const useAuthStore = defineStore('authStore', {
     async getIndividualSchool(schoolId: number) {
       if (!schoolId) return
       try {
-        const response = await fetch(`http://localhost:5000/auth/schools/${schoolId}`, {
+        const response = await fetch(`/api/auth/schools/${schoolId}`, {
           method: 'GET',
         })
         if (!response.ok) throw new Error()
@@ -103,7 +103,7 @@ export const useAuthStore = defineStore('authStore', {
     },
     async getSchools() {
       try {
-        const response = await fetch(`http://localhost:5000/auth/schools`, {
+        const response = await fetch(`/api/auth/schools`, {
           method: 'GET',
         })
         if (!response.ok) throw new Error()
@@ -116,7 +116,7 @@ export const useAuthStore = defineStore('authStore', {
     },
     async getClasses(schoolId: number) {
       try {
-        const response = await fetch(`http://localhost:5000/auth/schools/${schoolId}/classes`)
+        const response = await fetch(`/api/auth/schools/${schoolId}/classes`)
         if (!response.ok) throw new Error()
         if (response.ok) {
           const result = await response.json()
@@ -130,7 +130,7 @@ export const useAuthStore = defineStore('authStore', {
     async getClasssStudents(schoolId: number, classNumber: number) {
       try {
         const response = await fetch(
-          `http://localhost:5000/auth/schools/${schoolId}/classes/${classNumber}/students`,
+          `/api/auth/schools/${schoolId}/classes/${classNumber}/students`,
         )
         if (!response.ok) throw new Error()
         if (response.ok) {

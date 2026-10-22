@@ -167,7 +167,7 @@ export const useStudentStore = defineStore('studentStore', {
     //   const userId = userStore.user?.id
     //   const testId = 1 // ???
 
-    //   const response = await fetch('http://localhost:5000/assessment/students/', {
+    //   const response = await fetch('/api/assessment/students/', {
     //     method: 'POST',
     //     headers: { 'Content-Type': 'application/json' },
     //     body: JSON.stringify({
@@ -285,7 +285,7 @@ export const useStudentStore = defineStore('studentStore', {
       console.log('formData: ', formData)
 
       try {
-        const response = await fetch(`http://localhost:5000/student/assessment/transcribe`, {
+        const response = await fetch(`/api/student/assessment/transcribe`, {
           method: 'POST',
           body: formData,
         })
@@ -358,21 +358,18 @@ export const useStudentStore = defineStore('studentStore', {
           console.log('schoolId: ', schoolId)
           console.log('studentId: ', this.user?.id)
 
-          const response = await fetch(
-            'http://localhost:5000/student/assessment/studentassessments',
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                schoolId: schoolId,
-                studentId: this.user?.id,
-                testId: testId,
-                status: status,
-                currentAssessmentSessionID: this.currentAssessmentSessionId,
-                payload: payload,
-              }),
-            },
-          )
+          const response = await fetch('/api/student/assessment/studentassessments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              schoolId: schoolId,
+              studentId: this.user?.id,
+              testId: testId,
+              status: status,
+              currentAssessmentSessionID: this.currentAssessmentSessionId,
+              payload: payload,
+            }),
+          })
 
           if (!response.ok) {
             throw new Error('Failed to save test!')

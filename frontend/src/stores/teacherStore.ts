@@ -65,7 +65,7 @@ export const useTeacherStore = defineStore('teacherStore', {
       this.allStudents = []
       const schoolId = this.user?.schoolId
       try {
-        const response = await fetch(`http://localhost:5000/teacher/students/${schoolId}`)
+        const response = await fetch(`/api/teacher/students/${schoolId}`)
 
         if (!response.ok) throw new Error()
         if (response.ok) {
@@ -146,7 +146,7 @@ export const useTeacherStore = defineStore('teacherStore', {
       const userId = studentId
       try {
         const response = await fetch(
-          `http://localhost:5000/teacher/assessment/${schoolId}/${userId}/${assessmentId}/audio`,
+          `/api/teacher/assessment/${schoolId}/${userId}/${assessmentId}/audio`,
           { method: 'GET' },
         )
 
@@ -179,12 +179,9 @@ export const useTeacherStore = defineStore('teacherStore', {
       const userId = studentId
       console.log('ID: ', userId)
       try {
-        const response = await fetch(
-          `http://localhost:5000/teacher/assessment/tests/user/${schoolId}/${userId}`,
-          {
-            method: 'GET',
-          },
-        )
+        const response = await fetch(`/api/teacher/assessment/tests/user/${schoolId}/${userId}`, {
+          method: 'GET',
+        })
 
         if (!response.ok) throw new Error()
         if (response.ok) {
@@ -205,7 +202,7 @@ export const useTeacherStore = defineStore('teacherStore', {
     async getAllAssessments() {
       try {
         const schoolId = this.user?.schoolId
-        const response = await fetch(`http://localhost:5000/teacher/assessment/tests/${schoolId}`, {
+        const response = await fetch(`/api/teacher/assessment/tests/${schoolId}`, {
           method: 'GET',
         })
 
@@ -255,7 +252,7 @@ export const useTeacherStore = defineStore('teacherStore', {
         return alert('Please select a class for testing first.')
       try {
         if (this.user) {
-          const response = await fetch('http://localhost:5000/teacher/assessment/sessions', {
+          const response = await fetch('/api/teacher/assessment/sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -283,7 +280,7 @@ export const useTeacherStore = defineStore('teacherStore', {
     },
     async endCurrentAssessmentSession(status: string) {
       try {
-        const response = await fetch('http://localhost:5000/teacher/assessment/sessions', {
+        const response = await fetch('/api/teacher/assessment/sessions', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -312,7 +309,7 @@ export const useTeacherStore = defineStore('teacherStore', {
       const userId = this.user?.id
       const testId = 1 // ???
 
-      const response = await fetch('http://localhost:5000//teacher/assessment/students/', {
+      const response = await fetch('/api//teacher/assessment/students/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -354,7 +351,7 @@ export const useTeacherStore = defineStore('teacherStore', {
       console.log('hello?')
       const userId = this.user?.id
       try {
-        const response = await fetch(`http://localhost:5000/teacher/assessment/upload/save`, {
+        const response = await fetch(`/api/teacher/assessment/upload/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -382,7 +379,7 @@ export const useTeacherStore = defineStore('teacherStore', {
       formData.append('userId', `${userId}`)
 
       try {
-        const response = await fetch(`http://localhost:5000/teacher/assessment/upload/new`, {
+        const response = await fetch(`/api/teacher/assessment/upload/new`, {
           method: 'POST',
           body: formData,
         })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ChooseAssessment from '@/components/ChooseAssessment.vue'
 import FileUpload from '@/components/FileUpload.vue'
+import Logout from '@/components/Logout.vue'
 import StartEndCancelSessionButton from '@/components/StartEndCancelSessionButton.vue'
 import StudentAllTestResults from '@/components/StudentAllTestResults.vue'
 import { useAuthStore } from '@/stores/authStore'
@@ -34,9 +35,6 @@ const isSeletedClass = (classId: number) => {
   }
 }
 
-const logout = () => {
-  authStore.logout()
-}
 onMounted(async () => {
   console.log('User: ', teacherStore.user)
 
@@ -48,9 +46,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
-    <button class="border px-3 py-2" @click="logout">Logout</button>
-  </div>
+  <Logout />
   <div class="flex mt-5">
     <div v-for="tab in tabsArray" class="ml-10 mr-10 text-lg" @click="changeTabs(tab)">
       {{ tab }}
